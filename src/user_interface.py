@@ -232,13 +232,35 @@ class MinesweeperWindow(arcade.Window):
         elif key == arcade.key.S:
             self._take_ai_turn()
 
-      # AI solver: play a single AI turn and record its justification
+       # AI solver: one turn is any flags the AI can justify plus one uncovering.
+    # Flags reveal nothing and cannot lose the game, so they are not turns.
     def _take_ai_turn(self):
-        """Play one AI move and record why it was made."""
+        """Play one AI turn: place any deduced flags, then uncover one cell."""
         if self.game is None or self.game.is_won or self.game.is_lost:
             return
-        move = self.ai.step()
-        self.ai_reason = move.reason if move else "no moves available"
+
+        flags_placed = 0
+        # Bounded rather than while True: this runs on the render thread, so a
+        # move generator that never returned a reveal would freeze the window.
+        for _ in range(board_manager.BOARD_SIZE ** 2):
+            move = self.ai.step()
+
+            if move is None:
+                self.ai_reason = "no moves available"
+                return
+
+            if move.action == "reveal":
+                self.ai_reason = move.reason
+                if flags_placed:
+                    self.ai_reason += f" (after {flags_placed} flag(s))"
+                return
+
+            flags_placed += 1
+            self.ai_reason = move.reason
+
+            # A flag can end the game only by completing a win condition; stop if so.
+            if self.game.is_won or self.game.is_lost:
+                return
 
     # AI solver: arcade calls this every frame; used to pace automatic solving
     def on_update(self, delta_time):
